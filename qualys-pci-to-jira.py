@@ -125,8 +125,8 @@ jira_temp_query_file = jira_files_dir+'/jira-temp-query.json'
 
 ### PROXY ###
 proxies = {
-    'http': '<YOUR PROXY:PORT IN NOT NEEDED>',
-    'https': '<YOUR PROXY:PORT IN NOT NEEDED>',
+    'http': 'http://proxy-ws.cbank.kz:8080',
+    'https': 'http://proxy-ws.cbank.kz:8080',
 }
 
 ### VALIDATING CREDS ###
@@ -143,11 +143,12 @@ if not path.isfile(script_data):
     exit()
 with open(script_data, 'r', encoding='utf-8') as file:
     data = [i.strip() for i in file.readlines()]
-    qualys_api_coded_creds = data[1]
-    jira_api_coded_creds = data[3]
+    qualys_pci_api_root_url = data[1]
+    qualys_api_coded_creds = data[3]
+    jira_base_url = data[5]
+    jira_api_coded_creds = data[7]
 
 ### QUALYS PCI API VARS ###
-qualys_pci_api_root_url = 'https://pci-api.qualys.com'
 qualys_pci_api_vuln_url = qualys_pci_api_root_url+'/pci/vuln'
 qualys_pci_api_vuln_list_url = qualys_pci_api_vuln_url+'/list'
 qualys_query_headers = {
@@ -156,7 +157,7 @@ qualys_query_headers = {
 }
 
 ### JIRA API VARS ###
-jira_api_url = 'https://<YOUR JIRA DOMAIN>/rest/api/2/issue/'
+jira_api_url = f'{jira_base_url}/rest/api/2/issue/'
 jira_query_headers = {
     'Authorization': 'Basic '+jira_api_coded_creds,
     'X-Requested-With': 'qualys-to-jira-script',
@@ -218,7 +219,9 @@ def make_jira_task():
                 logging.info(jira_api_request.text)
                 logging.info(
                     'Sending JSON data(TASK) to Jira API - DONE!')
-                user_report_temp.write(f'JIRA TASK: {str(jira_api_request.text)}\n')
+                
+                user_report_temp.write(f'\nJIRA TASK(ID is: {id}; IP is: {vuln_ip}):\n{str(jira_api_request.text)}\n')
+                
                 jira_task_parent_key = re.findall(jira_task_key_pattern, jira_api_request.text)[0]
                 jira_task_keys.append(f'TASK: {re.findall(jira_task_key_pattern, jira_api_request.text)[0]}')
             else:
@@ -306,7 +309,9 @@ def make_jira_subtask():
                     'Sending JSON data(SUB-TASK) to Jira API - DONE!')
                 jira_subtasks_count += 1
                 logging.info(str(jira_api_request.text))
-                user_report_temp.write(f'JIRA SUB-TASK: {str(jira_api_request.text)}\n')
+                
+                user_report_temp.write(f'JIRA SUB-TASK(ID is: {id}; IP is {vuln_ip}; QID is {vuln_qid}):\n{str(jira_api_request.text)}\n')
+                
                 jira_task_keys.append(f'SUB-TASK: {re.findall(jira_task_key_pattern, jira_api_request.text)[0]}')
                 logging.info(
                     'Sleeping for 1 seconds before next request...\n')
@@ -411,7 +416,7 @@ except KeyError as e:
     send_mail_report('error')
     exit()
 logging.info('DONE: getting vulns list\n')
-#user_report_temp.write(f'Vulnd IDs list to process:\n{qualys_vuln_ids_list}\n')
+user_report_temp.write(f'Qualys vulnd IDs list to process:\n{qualys_vuln_ids_list}\n')
 
 ### GET QUALYS VULN DETAILS ###
 for id in qualys_vuln_ids_list:
@@ -440,7 +445,7 @@ for id in qualys_vuln_ids_list:
     vuln_port = str(vuln_details_data['port'])
     try:
         if len(vuln_details_data['cveList']) == 0:
-            logging.warning(f'WARNING: no CVE found for {id}{vuln_qid}, leaving blank')
+            logging.warning(f'WARNING: no CVE found for {id}-{vuln_qid}, leaving blank')
             vuln_cveId = ['NA']
         else:
             vuln_cveId = [vuln_details_data['cveList'][ind]['urlText'] for ind in range(len(vuln_details_data['cveList']))]
@@ -464,8 +469,12 @@ for id in qualys_vuln_ids_list:
     #vuln_vendorReferenceList = str(vuln_details_data['vendorReferenceList'])
     #vuln_dateLastUpdate = str(vuln_details_data['dateLastUpdate'])
 
+### DEBUG ###
+#exit()
+
     ### CREATE TASK OR SUB-TASK OR TASK AND SUB-TASK ###
     if vuln_ip not in processed_vuln_ips.values():
+        logging.info(f'{vuln_ip} is not processed, starting jira TASK creating job')
         make_jira_task()
         processed_vuln_ips[jira_task_parent_key] = vuln_ip
         
@@ -475,15 +484,19 @@ for id in qualys_vuln_ids_list:
         logging.info(f'DEBUG: LAST PROCESSED ID: {id}')
         logging.info(f'DEBUG: LAST PROCESSED IP: {vuln_ip}')
         logging.info(f'DEBUG: LAST PROCESSED CVSS_BASE: {vuln_cvssBase}')
-        #user_report_temp.write(f'Now porcessing Qualys Vuln ID({id}-{vuln_qid}-{vuln_ip}):\n')
         
+        logging.info(f'{vuln_ip} is not processed, starting jira SUB-TASK creating job after TASK created')
         make_jira_subtask()
     else:
+        '''
         for key in processed_vuln_ips.keys():
             if vuln_ip in processed_vuln_ips.values():
                 jira_task_parent_key = key
                 break
-        #user_report_temp.write(f'Now porcessing Qualys Vuln ID({id}-{vuln_ip}):\n')
+        '''
+
+        logging.info(f'{vuln_ip} is processed already, starting jira SUB-TASK creating job')
+        logging.info(f'Current parent iP is {jira_task_parent_key}')
         make_jira_subtask()
 
 logging.info(
@@ -515,22 +528,22 @@ logging.info('DONE: POST JOBS\n')
 logging.info('SCRIPT WORK DONE: QUALYS REPORT TO JIRA TICKET')
 
 logging.info('LIST OF PROCESSED QUALYS VULNS(IDs):')
-user_report_temp.write('LIST OF QUALYS VULN IDs TO PROCESS:\n')
 for id in qualys_vuln_ids_list:
     logging.info(f'QUALYS ID: {id}')
-    user_report_temp.write(f'QUALYS ID: {id}\n')
 
 logging.info('\nJIRA TASKS/SUB-TASKS INFO:')
 if jira_tasks_count == 0:
     logging.warning('NO JIRA TASKS CREATED: Qualys report might be empty!')
 else:
-    user_report_temp.write('-----')
+    user_report_temp.write('-----\n')
     logging.info('Jira TASKS created: ' + str(jira_tasks_count))
-    user_report_temp.write('Jira TASKS created: ' + str(jira_tasks_count))
+    user_report_temp.write(f'Jira TASKS created: {jira_tasks_count}\n')
+
     logging.info('Jira SUB-TASKS created: ' + str(jira_subtasks_count))
-    user_report_temp.write('Jira SUB-TASKS created: ' + str(jira_subtasks_count))
+    user_report_temp.write(f'Jira SUB-TASKS created: {jira_subtasks_count}\n\n')
+    
     logging.info('LIST of Jira task/sub-task keys created:\n-----')
-    user_report_temp.write('LIST of Jira task/sub-task keys created:\n-----')
+    user_report_temp.write('LIST of Jira task/sub-task keys created:\n-----\n')
     ### PRINT ALL CREATED JIRA TASKS
     for task in jira_task_keys:
         logging.info(task)
