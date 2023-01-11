@@ -1,22 +1,23 @@
-Qualys PCI Scan Results to Jira
-Edit
-Description&Workflow
+<h1>Qualys PCI Scan Results to Jira</h1>
+
+<h2>Description&Workflow</h2>
+
 The script is automatization of creating Jira tickets(via Jira API) based on Qualys PCI Compliance report(via Qualys api).
 
-Workflow:
+<h3>Workflow:</h3>
 * Get and parse Qualys vulnerabilities list(get /pci/vuln/list);
   * exclude vulnerabilities that has field pciCompliant=Pass, take only with Fail;
 * get and parse qualys vuln details(get /pci/vuln/<vuln_id>/details);
 * create Jira Task, based on IP field
   * create Jira sub-task based on parent IP
 
-Additions Features
+<h3>Additions Features</h3>
 * Log rotation
 * Send email(smtp without auth)(can be turned off):
   * errors
   * user-report
 
-<h3>Requirements:</h3>
+<h2>Requirements:</h2>
 
 Tested on Python 3.10.
 
@@ -122,10 +123,14 @@ jira-query-subtask-template.json:
 
 Script Data
 
-Lines order of these file are important
+Lines order of these file are important!
 ```
+# qualys api url
+https://pci-api.qualys.com
 # qualys api base64 creds(user:pass)
 <YOUR QUALYS ACCOUNT:PASSWORD BASE64 STRING>
+# jira base url
+<YOUR JIRA DOMAIN, https://jira.example.com>
 # jira api base64 creds(user:pass)
 <YOUR JIRA ACCOUNT:PASSWORD BASE64 STRING>
 ```
